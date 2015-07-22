@@ -9,7 +9,10 @@ int levelChangeFrame;
 int buttonDirection = 0; //set to -1 if left arrow key and 1 if right arrow key
 Boolean started = false;
 ArrayList<Bullet> bullets;
-
+int hsIdx;
+String highscores[];
+Boolean enteringName = false;
+String name = "";
 
 void setup(){
   size(800, 600);
@@ -18,14 +21,25 @@ void setup(){
   alevel = new AsteroidsLevel(level, m);
   titleFont = createFont("Hyperspace Bold", 100);
   bullets = new ArrayList<Bullet>();
+  highscores = loadStrings("highscores.txt");
 }
 
 void draw(){
-  background(0);
+  //System.out.println(mouseX + ", " + mouseY);
   if(!started){
+    background(0);
     titleScreen();
   }
+  else if(collided){
+    if(enteringName){
+      showName();
+    }
+    else if(hsIdx >= 0){
+      showHighscores();
+    }
+  }  
   else{
+     background(0);
     if(frameCount <= levelChangeFrame + 100){
       textSize(100);
       fill(255,0,0,100);
@@ -63,11 +77,10 @@ void draw(){
       m.drawFlames();
     }
     alevel.updateLevel(m);
-    showScore(score);
+    showState(score);
     if(collided){
       gameOver();
     }
-    System.out.println(bullets.size());
   }
 }
 
@@ -85,9 +98,21 @@ void keyReleased(){
 }
 
 void keyPressed(){
-  float leastDistance = 1000;
-  int idx = -1;
-  if(keyCode == LEFT){
+  if(enteringName){
+    if(key == BACKSPACE){
+      if(name.length() > 0){
+        name = name.substring(0, name.length()-1);
+      }
+    }
+    else if(key == ENTER || key == RETURN){
+      saveScore();
+      System.out.println("enter");
+      enteringName = false;  
+    }
+    else name = name + key;
+  }
+ 
+  else if(keyCode == LEFT){
     buttonDirection = -1;
   }
   else if(keyCode == RIGHT){
@@ -109,7 +134,30 @@ void keyPressed(){
     }
   }
 }
-  
+
+void showHighscores(){
+  background(0);
+  textAlign(CENTER);
+  textSize(80);
+  text("LEADERBOARD", width/2, 100);
+  textSize(65);
+  textAlign(LEFT);
+  for(int i = 0; i < 5; i++){
+    text(highscores[i], 100, 200+90*i);
+  }
+}
+
+void showName(){
+      noStroke();
+      fill(0);
+      rect(width/2-300, height/2 + 160, 800, 500);
+      textAlign(LEFT);
+      fill(255);
+      textSize(60);
+      text(name, width/2-50, height/2 + 250);
+      rect(width/2-55, height/2 +254, 37, 4);
+      rect(width/2-16, height/2 +254, 37, 4);
+}
 
 void titleScreen(){
   textFont(titleFont);
@@ -119,7 +167,7 @@ void titleScreen(){
   text("Press ENTER to play", width/2, height/2+height/4);
 }
 
-void showScore(int score){
+void showState(int score){
   textSize(16);
   fill(255);
   textAlign(LEFT);
@@ -137,8 +185,50 @@ void gameOver(){
   fill(200, 0, 0);
   text("Score: " + Integer.toString(score),width/2, height/2 + 70);
   fill(200);
-  text("Press 'r' to restart", width/2, height/2+120);
+  hsIdx = checkHighscore();
+  if(hsIdx < 0){
+    text("Press 'r' to restart", width/2, height/2+120);
+  }
+  else{
+    textSize(20);
+    text("You have reached the leaderboard! \nEnter your initials to save highscore", width/2, height/2+120);
+    enteringName = true;
+  }
 }
+
+void saveScore(){
+  String temp = highscores[hsIdx];
+  for(int i = hsIdx+1; i<5; i++){
+    highscores[i] = temp;
+    if(i+1 < 5){
+      temp = highscores[i+1];
+    }
+  }
+  if(score < 10){
+    highscores[hsIdx] = name + " " + "0" + Integer.toString(score);
+  }
+  else{
+    highscores[hsIdx] = name + " " + Integer.toString(score);
+  }
+  saveStrings("C:/Users/suraj/Dropbox/Processing Projects/Asterballs/data/highscores.txt", highscores);
+}
+
+int checkHighscore(){
+  for(int i = 0; i < 5; i++){
+    int curVal = Integer.parseInt(highscores[i].substring(4));
+    System.out.println(curVal);
+    if(score > curVal){
+      return i;
+    }
+    else if(score == curVal && i < 4){
+      return i+1;
+    }
+  }
+  return -1;
+}
+
+
+  
 
 
 class Bullet{
@@ -177,7 +267,7 @@ class Bullet{
          continue;
        }
        PVector distance = PVector.sub(location, al.roids[i].location);
-       if(distance.mag() < al.roids[i].diameter/2){
+       if(distance.mag() <= al.roids[i].diameter/2){
          if(al.roids[i].size == 0){
            al.roids[i].shot = true;
            al.remainingAlive--;
@@ -275,7 +365,7 @@ class Asteroid{
       velocity.setMag(2);
     }
     shot = false;
-    diameter = 20+20*size;
+    diameter = 40+20*size;
   }
   
   Boolean colliding(PVector mlocation){
@@ -288,7 +378,7 @@ class Asteroid{
   
   void shrink(){
     size = 0;
-    diameter = 20;
+    diameter = 40;
   }
     
   void update(){
@@ -318,26 +408,6 @@ class Asteroid{
       translate(location.x, location.y);
       ellipse(0,0, diameter, diameter);
       popMatrix();
-    }
-  }
-  
-  Boolean checkHit(Mover m){
-    PVector d = angleVect.get();
-    d.setMag(1); // 
-    PVector f = PVector.sub(m.location, location);
-    float r = (20+20*size)/2; //radius of circle
-    // find discriminant of equation P=E+x*d (where E is the location of the ship)
-    float a = d.dot(d);
-    float b = 2*f.dot(d);
-    float c = f.dot(f)-r*r;
-    float discriminant = b*b - 4*a*c;
-    //System.out.println(discriminant);
-    if(discriminant >= -40){
-      //shot = true;
-      return true;
-    }
-    else {
-      return false;
     }
   }
 }
