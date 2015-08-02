@@ -1,3 +1,8 @@
+import java.util.Iterator;
+import java.util.Random;
+ArrayList <ParticleSystem> systems;
+PImage image;
+Random generator = new Random();
 Mover m;
 PFont titleFont;
 PVector angleVect;
@@ -15,13 +20,18 @@ Boolean enteringName = false;
 String name = "";
 
 void setup(){
-  size(800, 600);
+  size(800, 600, P2D);
+  blendMode(ADD);
+  systems = new ArrayList<ParticleSystem>();
   m = new Mover();
   angleVect = new PVector(1, 0);
   alevel = new AsteroidsLevel(level, m);
   titleFont = createFont("Hyperspace Bold", 100);
   bullets = new ArrayList<Bullet>();
   highscores = loadStrings("highscores.txt");
+  image = loadImage("ball.png");
+  image.resize(6,6);
+  println(highscores[0]);
 }
 
 void draw(){
@@ -74,7 +84,21 @@ void draw(){
     m.checkEdges();
     m.display();
     if(m.boostActivated){
-      m.drawFlames();
+      PVector loc = m.location.get();
+      PVector ang = angleVect.get();
+      ang.mult(10);
+      loc.sub(ang);
+      ParticleSystem newest = systems.get(systems.size()-1);
+      newest.location = loc;
+      newest.addParticle();
+      newest.addParticle();
+    }
+    for(int i = 0; i<systems.size(); i++){
+      ParticleSystem cur = systems.get(i);
+      cur.run();
+      if(cur.deadParticles == cur.numParticles){
+        systems.remove(i);
+      }
     }
     alevel.updateLevel(m);
     showState(score);
@@ -106,10 +130,9 @@ void keyPressed(){
     }
     else if(key == ENTER || key == RETURN){
       saveScore();
-      System.out.println("enter");
       enteringName = false;  
     }
-    else name = name + key;
+    else if(name.length()<2) name = name + key;
   }
  
   else if(keyCode == LEFT){
@@ -121,6 +144,7 @@ void keyPressed(){
   else if(key == 'z'){
     m.applyForce(angleVect);
     m.boostActivated = true;
+    systems.add(new ParticleSystem(m.location.get()));
   }
   else if(key == 'r'){
     m.reset();
@@ -215,7 +239,7 @@ void saveScore(){
 
 int checkHighscore(){
   for(int i = 0; i < 5; i++){
-    int curVal = Integer.parseInt(highscores[i].substring(4));
+    int curVal = Integer.parseInt(highscores[i].substring(3));
     System.out.println(curVal);
     if(score > curVal){
       return i;
@@ -226,9 +250,6 @@ int checkHighscore(){
   }
   return -1;
 }
-
-
-  
 
 
 class Bullet{
@@ -263,16 +284,18 @@ class Bullet{
    
    boolean checkCollisions(AsteroidsLevel al, Mover m){
      for(int i = 0; i<al.numAsteroids; i++){
-       if(al.roids[i] == null || cos(m.angle) > 0 && al.roids[i].location.x < m.location.x || cos(m.angle) < 0 && al.roids[i].location.x > m.location.x){
+       if(al.roids[i] == null){
          continue;
        }
        PVector distance = PVector.sub(location, al.roids[i].location);
        if(distance.mag() <= al.roids[i].diameter/2){
          if(al.roids[i].size == 0){
            al.roids[i].shot = true;
+           al.roids[i].explode();
            al.remainingAlive--;
          }
          else{
+           al.roids[i].explode();
            al.roids[i].shrink();
            al.roids[i].velocity.setMag(4);
            al.roids[i+1] = new Asteroid(0, m);
@@ -400,6 +423,19 @@ class Asteroid{
     }
   }
   
+  void explode(){
+    if(size == 1){
+      fill(255);
+    }
+    else{
+      fill(156, 42, 0);
+    }
+    ellipse(location.x, location.y, diameter, diameter);
+
+  
+    
+  }
+
   void display(){
     if(!shot){
       stroke(255);
@@ -502,5 +538,86 @@ class Mover {
     else if(location.y < 0){
       location.y = height;
     }
+  }
+}
+
+public class ParticleSystem{
+  ArrayList<Particle> particles;
+  PVector location;
+  int numParticles = 50;
+  int deadParticles = 0;
+  
+  ParticleSystem(PVector loc){
+    particles = new ArrayList<Particle>(0);
+    location = loc;
+  }
+  
+  void run(){
+    Iterator<Particle> iter = particles.iterator();
+    while(iter.hasNext()){
+      Particle prt = iter.next();
+      prt.update();
+      prt.display();
+      if(prt.isDead()){
+        iter.remove();
+        deadParticles++;
+      }
+    }
+  }
+  
+  void addParticle(){
+    particles.add(new Particle(new PVector(location.x, location.y)));
+  }
+  
+  void applyForce(PVector force){
+    for(Particle p : particles){
+      p.applyForce(force);
+    }
+  }
+}
+
+public class Particle{
+  PVector location;
+  PVector acceleration;
+  PVector velocity;
+  //PVector angVelocity;
+  int decay;
+  float mass;
+  
+  Particle(PVector loc){
+    location = loc;
+    acceleration = new PVector(0, 0);
+    velocity = new PVector(1, 0);
+    velocity.rotate(m.angle - PI);
+    velocity.x = velocity.x + (float)generator.nextGaussian()*0.3;
+    velocity.y = velocity.y + (float) generator.nextGaussian()*0.3;
+    //angVelocity = new PVector(0, 0);
+    decay = 100;
+    mass = 0.5;
+  }
+  
+  void applyForce(PVector f){
+    PVector force = f.get();
+    force.div(mass);
+    acceleration.add(force);
+  }
+  
+  void update(){
+    velocity.add(acceleration);
+    location.add(velocity);
+    acceleration.mult(0);
+    decay -= 1;
+  }
+  
+  void display(){
+    //fill(0, decay);
+    //ellipse(location.x,location.y, 7, 7);
+    imageMode(CENTER);
+    tint(146, 42, 0, map(decay, 0, 100, 0, 255));
+    image(image, location.x, location.y);
+  }
+  
+  boolean isDead(){
+    return decay < 0;
   }
 }
